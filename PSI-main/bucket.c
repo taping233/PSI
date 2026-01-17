@@ -32,12 +32,13 @@ static void *safe_malloc(size_t size, const char *err_msg) {
 }
 
 /**
+ * 【关键修改】重命名函数避免与GMP库冲突：mpz_array_init → my_mpz_array_init
  * 初始化mpz_t数组并赋值
  * @param arr 数组指针
  * @param len 数组长度
  * @param val 初始值（无符号整数）
  */
-static void mpz_array_init(mpz_t *arr, size_t len, unsigned long val) {
+static void my_mpz_array_init(mpz_t *arr, size_t len, unsigned long val) {
     for (size_t i = 0; i < len; i++) {
         mpz_init(arr[i]);
         mpz_set_ui(arr[i], val);
@@ -45,11 +46,12 @@ static void mpz_array_init(mpz_t *arr, size_t len, unsigned long val) {
 }
 
 /**
+ * 【关键修改】重命名函数保持统一：mpz_array_clear → my_mpz_array_clear
  * 清理mpz_t数组
  * @param arr 数组指针
  * @param len 数组长度
  */
-static void mpz_array_clear(mpz_t *arr, size_t len) {
+static void my_mpz_array_clear(mpz_t *arr, size_t len) {
     for (size_t i = 0; i < len; i++) {
         mpz_clear(arr[i]);
     }
@@ -61,10 +63,10 @@ static void mpz_array_clear(mpz_t *arr, size_t len) {
  * @param m_bit 随机数比特长度
  */
 static void bucket_init_single(Bucket *b, unsigned int m_bit) {
-    // 初始化根（默认0）
-    mpz_array_init(b->roots, BUCKET_ROOTS, 0);
-    // 初始化多项式系数（默认0）
-    mpz_array_init(b->coeffs, BUCKET_POLY_LEN, 0);
+    // 初始化根（默认0）【修改】替换为自定义函数
+    my_mpz_array_init(b->roots, BUCKET_ROOTS, 0);
+    // 初始化多项式系数（默认0）【修改】替换为自定义函数
+    my_mpz_array_init(b->coeffs, BUCKET_POLY_LEN, 0);
     // 初始化tag（默认0）
     mpz_init(b->tag);
     mpz_set_ui(b->tag, 0);
@@ -180,9 +182,9 @@ static void recursive_poly_product_flint(mpz_t **roots, size_t start, size_t end
     mpz_t *left_poly = safe_malloc(sizeof(mpz_t) * (left_deg + 1), "left_poly malloc failed");
     mpz_t *right_poly = safe_malloc(sizeof(mpz_t) * (right_deg + 1), "right_poly malloc failed");
     
-    // 初始化子多项式数组
-    mpz_array_init(left_poly, left_deg + 1, 0);
-    mpz_array_init(right_poly, right_deg + 1, 0);
+    // 初始化子多项式数组【修改】替换为自定义函数
+    my_mpz_array_init(left_poly, left_deg + 1, 0);
+    my_mpz_array_init(right_poly, right_deg + 1, 0);
     
     // 递归计算左右子多项式
     recursive_poly_product_flint(roots, start, mid, left_poly, M);
@@ -191,9 +193,9 @@ static void recursive_poly_product_flint(mpz_t **roots, size_t start, size_t end
     // FFTW多项式乘法
     poly_multiply_mod_fftw(left_poly, left_deg, right_poly, right_deg, result, M);
     
-    // 清理临时数组
-    mpz_array_clear(left_poly, left_deg + 1);
-    mpz_array_clear(right_poly, right_deg + 1);
+    // 清理临时数组【修改】替换为自定义函数
+    my_mpz_array_clear(left_poly, left_deg + 1);
+    my_mpz_array_clear(right_poly, right_deg + 1);
     free(left_poly);
     free(right_poly);
 }
@@ -228,8 +230,8 @@ void result_bucket_init(Result_BucketSet *result_set, unsigned int n) {
     
     for (size_t i = 0; i < n; ++i) {
         Result_Bucket *b = &result_set->result_buckets[i];
-        // 初始化系数（默认0）
-        mpz_array_init(b->coeffs, RESULT_POLY_LEN, 0);
+        // 初始化系数（默认0）【修改】替换为自定义函数
+        my_mpz_array_init(b->coeffs, RESULT_POLY_LEN, 0);
         // 初始化tag（默认0）
         mpz_init(b->tag);
         mpz_set_ui(b->tag, 0);
@@ -307,7 +309,8 @@ void bucket_expand_iterative(BucketSet *set, const mpz_t M) {
         mpz_t **base_polys = safe_malloc(sizeof(mpz_t*) * base_count, "base_polys malloc failed");
         for (size_t i = 0; i < base_count; i++) {
             base_polys[i] = safe_malloc(sizeof(mpz_t) * LINEAR_POLY_LEN, "base_poly[i] malloc failed");
-            mpz_array_init(base_polys[i], LINEAR_POLY_LEN, 0);
+            // 【修改】替换为自定义函数
+            my_mpz_array_init(base_polys[i], LINEAR_POLY_LEN, 0);
             create_linear_poly(base_polys[i], b->roots[i], M);
         }
         
@@ -323,24 +326,26 @@ void bucket_expand_iterative(BucketSet *set, const mpz_t M) {
                 if (right_idx < base_count) {
                     // 左右多项式乘积：次数2，系数长度3
                     new_polys[i] = safe_malloc(sizeof(mpz_t) * PRODUCT_POLY_LEN_2, "new_poly[i] malloc failed");
-                    mpz_array_init(new_polys[i], PRODUCT_POLY_LEN_2, 0);
+                    // 【修改】替换为自定义函数
+                    my_mpz_array_init(new_polys[i], PRODUCT_POLY_LEN_2, 0);
                     // FFTW乘法合并
                     poly_multiply_mod_fftw(base_polys[left_idx], 1, 
                                          base_polys[right_idx], 1, 
                                          new_polys[i], M);
-                    // 清理旧多项式
-                    mpz_array_clear(base_polys[left_idx], LINEAR_POLY_LEN);
+                    // 清理旧多项式【修改】替换为自定义函数
+                    my_mpz_array_clear(base_polys[left_idx], LINEAR_POLY_LEN);
                     free(base_polys[left_idx]);
-                    mpz_array_clear(base_polys[right_idx], LINEAR_POLY_LEN);
+                    my_mpz_array_clear(base_polys[right_idx], LINEAR_POLY_LEN);
                     free(base_polys[right_idx]);
                 } else {
                     // 奇数个：复制最后一个多项式
                     new_polys[i] = safe_malloc(sizeof(mpz_t) * LINEAR_POLY_LEN, "new_poly[i] malloc failed");
-                    mpz_array_init(new_polys[i], LINEAR_POLY_LEN, 0);
+                    // 【修改】替换为自定义函数
+                    my_mpz_array_init(new_polys[i], LINEAR_POLY_LEN, 0);
                     mpz_set(new_polys[i][0], base_polys[left_idx][0]);
                     mpz_set(new_polys[i][1], base_polys[left_idx][1]);
-                    // 清理旧多项式
-                    mpz_array_clear(base_polys[left_idx], LINEAR_POLY_LEN);
+                    // 清理旧多项式【修改】替换为自定义函数
+                    my_mpz_array_clear(base_polys[left_idx], LINEAR_POLY_LEN);
                     free(base_polys[left_idx]);
                 }
             }
@@ -356,8 +361,8 @@ void bucket_expand_iterative(BucketSet *set, const mpz_t M) {
             for (size_t j = 0; j <= res_deg && j < BUCKET_POLY_LEN; j++) {
                 mpz_set(b->coeffs[j], base_polys[0][j]);
             }
-            // 清理临时多项式
-            mpz_array_clear(base_polys[0], res_deg + 1);
+            // 清理临时多项式【修改】替换为自定义函数
+            my_mpz_array_clear(base_polys[0], res_deg + 1);
             free(base_polys[0]);
             free(base_polys);
         } else {
@@ -375,13 +380,15 @@ void bucket_replace_root(mpz_t *poly, size_t poly_degree, const mpz_t r_out,
 
     // 步骤1：构造 (x - r_out) 多项式
     mpz_t linear[LINEAR_POLY_LEN];
-    mpz_array_init(linear, LINEAR_POLY_LEN, 0);
+    // 【修改】替换为自定义函数
+    my_mpz_array_init(linear, LINEAR_POLY_LEN, 0);
     create_linear_poly(linear, r_out, M);
     
     // 步骤2：多项式除法 P(x) / (x - r_out) = Q(x)（修复综合除法逻辑）
     // 安全分配商多项式数组（次数=poly_degree-1，系数长度=poly_degree）
     mpz_t *q = safe_malloc(sizeof(mpz_t) * poly_degree, "q poly malloc failed");
-    mpz_array_init(q, poly_degree, 0);
+    // 【修改】替换为自定义函数
+    my_mpz_array_init(q, poly_degree, 0);
     
     // 【核心修复】综合除法：不修改q[i-1]，仅用其值计算q[i]
     mpz_set(q[0], poly[0]); // 最高次项系数直接复制
@@ -398,10 +405,10 @@ void bucket_replace_root(mpz_t *poly, size_t poly_degree, const mpz_t r_out,
     create_linear_poly(linear, r_in, M);
     poly_multiply_mod_fftw(q, poly_degree-1, linear, 1, poly, M);
     
-    // 清理临时变量
-    mpz_array_clear(q, poly_degree);
+    // 清理临时变量【修改】替换为自定义函数
+    my_mpz_array_clear(q, poly_degree);
     free(q);
-    mpz_array_clear(linear, LINEAR_POLY_LEN);
+    my_mpz_array_clear(linear, LINEAR_POLY_LEN);
 }
 
 /**
@@ -455,6 +462,7 @@ void bucket_print(const BucketSet *set, size_t bucket_count, size_t roots_per_bu
     if (roots_per_bucket > BUCKET_ROOTS) roots_per_bucket = BUCKET_ROOTS;
 
     for (size_t i = 0; i < bucket_count; ++i) {
+        // 【优化】size_t类型用%zu格式符，避免警告
         printf("Bucket[%zu] roots:\n", i);
         for (size_t j = 0; j < roots_per_bucket; ++j)
             gmp_printf("  r[%03zu] = %Zd\n", j, set->buckets[i].roots[j]);
@@ -471,6 +479,7 @@ void bucket_print_poly(const BucketSet *set, size_t bucket_count, size_t coeffs_
     if (coeffs_to_show > BUCKET_POLY_LEN) coeffs_to_show = BUCKET_POLY_LEN;
 
     for (size_t i = 0; i < bucket_count; ++i) {
+        // 【优化】size_t类型用%zu格式符，避免警告
         printf("Bucket[%zu] polynomial coefficients (deg: %d):\n", i, BUCKET_ROOTS);
         for (size_t j = 0; j < coeffs_to_show; ++j) {
             gmp_printf("  coeff[%03zu] = %Zd\n", j, set->buckets[i].coeffs[j]);
@@ -486,10 +495,10 @@ void bucket_free(BucketSet *set) {
     if (!set || !set->buckets) return;
 
     for (size_t i = 0; i < set->count; ++i) {
-        // 释放根
-        mpz_array_clear(set->buckets[i].roots, BUCKET_ROOTS);
-        // 释放系数
-        mpz_array_clear(set->buckets[i].coeffs, BUCKET_POLY_LEN);
+        // 释放根【修改】替换为自定义函数
+        my_mpz_array_clear(set->buckets[i].roots, BUCKET_ROOTS);
+        // 释放系数【修改】替换为自定义函数
+        my_mpz_array_clear(set->buckets[i].coeffs, BUCKET_POLY_LEN);
         // 释放tag
         mpz_clear(set->buckets[i].tag);
     }
@@ -506,8 +515,8 @@ void result_bucket_free(Result_BucketSet *set) {
     if (!set || !set->result_buckets) return;
 
     for (size_t i = 0; i < set->count; ++i) {
-        // 释放系数
-        mpz_array_clear(set->result_buckets[i].coeffs, RESULT_POLY_LEN);
+        // 释放系数【修改】替换为自定义函数
+        my_mpz_array_clear(set->result_buckets[i].coeffs, RESULT_POLY_LEN);
         // 释放tag
         mpz_clear(set->result_buckets[i].tag);
     }
