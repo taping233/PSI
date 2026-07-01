@@ -1,0 +1,12 @@
+build*/
+*.o
+*.a
+*.so
+*.csv
+*.jsonl
+*.log
+*.tmp
+*.bak
+*.codex_bak*
+deploy*/
+__pycache__/
