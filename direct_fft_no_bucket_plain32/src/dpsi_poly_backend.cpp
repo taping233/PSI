@@ -193,10 +193,49 @@ static void command_roots()
     std::cout << "}\n";
 }
 
+
+static void command_eval()
+{
+    init_field();
+    uint64_t n = read_u64(std::cin, "poly len");
+    std::vector<uint64_t> coeffs((size_t)n);
+    for (uint64_t i = 0; i < n; ++i) coeffs[(size_t)i] = read_u64(std::cin, "poly coeff") % FIELD_PRIME;
+    uint64_t value_count = read_u64(std::cin, "value count");
+    std::vector<mp_limb_t> xs((size_t)value_count), ys((size_t)value_count);
+    std::vector<uint64_t> original((size_t)value_count);
+    for (uint64_t i = 0; i < value_count; ++i) {
+        uint64_t value = read_u64(std::cin, "query value");
+        if (value > UINT32_MAX) die("query element exceeds 32-bit range");
+        original[(size_t)i] = value;
+        xs[(size_t)i] = (mp_limb_t)(value % FIELD_PRIME);
+    }
+
+    nmod_poly_t f;
+    nmod_poly_init2(f, (mp_limb_t)FIELD_PRIME, (slong)coeffs.size());
+    for (size_t i = 0; i < coeffs.size(); ++i) {
+        nmod_poly_set_coeff_ui(f, (slong)i, (mp_limb_t)coeffs[i]);
+    }
+    if (value_count) {
+        nmod_poly_evaluate_nmod_vec_fast(ys.data(), f, xs.data(), (slong)value_count);
+    }
+    nmod_poly_clear(f);
+
+    std::vector<uint64_t> matches;
+    for (size_t i = 0; i < original.size(); ++i) {
+        if (ys[i] == 0) matches.push_back(original[i]);
+    }
+    std::sort(matches.begin(), matches.end());
+    matches.erase(std::unique(matches.begin(), matches.end()), matches.end());
+    std::cout << "{\"field_prime\":" << FIELD_PRIME << ",\"tested\":"
+              << value_count << ",\"matches\":";
+    print_vec(std::cout, matches);
+    std::cout << ",\"match_count\":" << matches.size() << "}\n";
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2) {
-        die("usage: dpsi_poly_backend share|roots < input");
+        die("usage: dpsi_poly_backend share|roots|eval < input");
     }
     std::string command = argv[1];
     if (command == "share") {
@@ -205,6 +244,10 @@ int main(int argc, char **argv)
     }
     if (command == "roots") {
         command_roots();
+        return 0;
+    }
+    if (command == "eval") {
+        command_eval();
         return 0;
     }
     die("unknown command: " + command);

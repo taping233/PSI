@@ -8,5 +8,7 @@ build*/
 *.tmp
 *.bak
 *.codex_bak*
-deploy*/
+deploy/
+deploy_*/
 __pycache__/
+*.pycn
