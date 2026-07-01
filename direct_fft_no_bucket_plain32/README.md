@@ -3,7 +3,7 @@
 本目录包含两类实现：
 
 1. **高性能单机 benchmark**：`build-rie/psi_direct_fft_no_bucket`，用于复现实验、计时、通信估计和论文步骤对齐。
-2. **真实多进程部署工具**：`deployments/` 和 `tools/dpsi_deploy.py`，用于把 cloud、query、client 拆成不同进程，通过 HTTP(S) 交换份额并支持动态更新。
+2. **真实多进程部署工具**：`deployments/`，用于把 cloud、query、client 拆成不同进程，通过 HTTP(S) 交换份额并支持动态更新。
 
 当前支持两种协议语义：
 
@@ -16,7 +16,6 @@
 src/main.c                         单机 benchmark 主程序
 src/dpsi_poly_backend.cpp          部署工具使用的 C++/NTL/FLINT 多项式后端
 tools/run_bench.py                 批量实验脚本
-tools/dpsi_deploy.py               第三方 Method 2 部署工具原始入口
 deployments/dpsi_protocol3/        D-PSI 查询方有集合的真实部署目录
 deployments/third_party_method2/   第三方无输入 Method 2 的真实部署目录
 docs/PAPER_ALIGNMENT.md            与论文步骤的对齐说明

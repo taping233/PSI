@@ -2,11 +2,11 @@
 
 This project now has two paths. The C executable is the high-performance
 single-process benchmark for the paper's delegated multi-party PSI flow. The
-Python deployment tool (`tools/dpsi_deploy.py`) runs separate cloud, query, and
-client processes over real HTTP(S) sockets and persists dynamic party updates;
-its set-polynomial construction, `omega_i p_i` multiplication, Method 2 GCD,
-and linear-root extraction are delegated to the compiled C++/NTL/FLINT backend
-`dpsi_poly_backend`.
+Python deployment tools under `deployments/` run separate cloud, query, and
+client processes over real HTTP(S) sockets and persist dynamic party updates.
+Their set-polynomial construction, `omega_i p_i` multiplication, Method 2 GCD,
+Protocol 3 multipoint evaluation, and linear-root extraction are delegated to
+the compiled C++/NTL/FLINT backend `dpsi_poly_backend`.
 The benchmark message layer still supports both the saved Zhihu long-connection
 transport estimator and an optional real loopback TCP/TLS RPC transport for
 measured communication cost.
@@ -61,8 +61,8 @@ if the third party must independently detect wrong output size.
 
 ## Real Deployment Tool
 
-`tools/dpsi_deploy.py` implements a deployable Method 2 variant with persistent
-state:
+`deployments/third_party_method2/deploy.py` implements a deployable Method 2 variant with persistent
+state. `deployments/dpsi_protocol3/deploy.py` implements the query-set Protocol 3 deployment path:
 
 | Paper role | Deployment process |
 | --- | --- |

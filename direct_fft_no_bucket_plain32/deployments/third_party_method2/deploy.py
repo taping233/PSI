@@ -27,7 +27,6 @@ import hmac
 import http.server
 import json
 import os
-import secrets
 import ssl
 import subprocess
 import sys
@@ -59,23 +58,15 @@ def default_poly_backend() -> str:
     return str(Path(__file__).resolve().parents[2] / "build-rie" / "dpsi_poly_backend")
 
 
-def use_python_poly_fallback() -> bool:
-    return os.environ.get("DPSI_DEPLOY_PY_POLY", "") in {"1", "yes", "true"}
-
-
 def require_poly_backend(path: str) -> str:
-    backend = path or default_poly_backend()
-    if not Path(backend).exists():
-        if use_python_poly_fallback():
-            return ""
+    backend = Path(path or default_poly_backend())
+    if not backend.exists():
         die(f"C/NTL/FLINT polynomial backend not found: {backend}; build target dpsi_poly_backend or set DPSI_POLY_BACKEND")
-    return backend
+    return str(backend)
 
 
 def backend_share(values: List[int], rounds: int, degree_bound: int, backend_path: str) -> Dict[str, Any]:
     backend = require_poly_backend(backend_path)
-    if not backend:
-        return {}
     payload = f"{rounds} {degree_bound} {len(values)} " + " ".join(str(v) for v in values) + "\n"
     proc = subprocess.run(
         [backend, "share"],
@@ -92,8 +83,6 @@ def backend_share(values: List[int], rounds: int, degree_bound: int, backend_pat
 
 def backend_roots(lhs: List[int], rhs: List[int], backend_path: str) -> Dict[str, Any]:
     backend = require_poly_backend(backend_path)
-    if not backend:
-        return {}
     payload = (
         f"{len(lhs)} " + " ".join(str(v) for v in lhs) + " " +
         f"{len(rhs)} " + " ".join(str(v) for v in rhs) + "\n"
@@ -111,29 +100,11 @@ def backend_roots(lhs: List[int], rhs: List[int], backend_path: str) -> Dict[str
     return json.loads(proc.stdout)
 
 
-def mod_inv(value: int) -> int:
-    if value % FIELD_PRIME == 0:
-        raise ZeroDivisionError("inverse of zero")
-    return pow(value % FIELD_PRIME, FIELD_PRIME - 2, FIELD_PRIME)
-
-
 def trim(poly: List[int]) -> List[int]:
     poly = [x % FIELD_PRIME for x in poly]
     while len(poly) > 1 and poly[-1] == 0:
         poly.pop()
     return poly or [0]
-
-
-def degree(poly: List[int]) -> int:
-    return len(trim(poly)) - 1
-
-
-def monic(poly: List[int]) -> List[int]:
-    poly = trim(poly)
-    if len(poly) == 1 and poly[0] == 0:
-        return poly
-    inv = mod_inv(poly[-1])
-    return [(x * inv) % FIELD_PRIME for x in poly]
 
 
 def poly_add(a: List[int], b: List[int]) -> List[int]:
@@ -144,102 +115,6 @@ def poly_add(a: List[int], b: List[int]) -> List[int]:
     return trim(out)
 
 
-def poly_sub(a: List[int], b: List[int]) -> List[int]:
-    n = max(len(a), len(b))
-    out = [0] * n
-    for i in range(n):
-        out[i] = ((a[i] if i < len(a) else 0) - (b[i] if i < len(b) else 0)) % FIELD_PRIME
-    return trim(out)
-
-
-def poly_mul(a: List[int], b: List[int]) -> List[int]:
-    a = trim(a)
-    b = trim(b)
-    if a == [0] or b == [0]:
-        return [0]
-    out = [0] * (len(a) + len(b) - 1)
-    for i, av in enumerate(a):
-        if av:
-            for j, bv in enumerate(b):
-                if bv:
-                    out[i + j] = (out[i + j] + av * bv) % FIELD_PRIME
-    return trim(out)
-
-
-def poly_divmod(a: List[int], b: List[int]) -> Tuple[List[int], List[int]]:
-    a = trim(a[:])
-    b = trim(b)
-    if b == [0]:
-        raise ZeroDivisionError("polynomial division by zero")
-    if degree(a) < degree(b):
-        return [0], a
-    q = [0] * (degree(a) - degree(b) + 1)
-    inv_lc = mod_inv(b[-1])
-    while degree(a) >= degree(b) and a != [0]:
-        shift = degree(a) - degree(b)
-        coeff = a[-1] * inv_lc % FIELD_PRIME
-        q[shift] = coeff
-        for i, bv in enumerate(b):
-            a[i + shift] = (a[i + shift] - coeff * bv) % FIELD_PRIME
-        a = trim(a)
-    return trim(q), trim(a)
-
-
-def poly_mod(a: List[int], modulus: List[int]) -> List[int]:
-    return poly_divmod(a, modulus)[1]
-
-
-def poly_divexact(a: List[int], b: List[int]) -> List[int]:
-    q, r = poly_divmod(a, b)
-    if r != [0]:
-        raise ValueError("non-exact polynomial division")
-    return q
-
-
-def poly_gcd(a: List[int], b: List[int]) -> List[int]:
-    a = trim(a)
-    b = trim(b)
-    while b != [0]:
-        a, b = b, poly_mod(a, b)
-    return monic(a)
-
-
-def poly_powmod(base: List[int], exp: int, modulus: List[int]) -> List[int]:
-    result = [1]
-    base = poly_mod(base, modulus)
-    while exp:
-        if exp & 1:
-            result = poly_mod(poly_mul(result, base), modulus)
-        exp >>= 1
-        if exp:
-            base = poly_mod(poly_mul(base, base), modulus)
-    return result
-
-
-def build_set_poly(values: List[int]) -> List[int]:
-    poly = [1]
-    for value in sorted(set(values)):
-        if value < 0 or value > 0xFFFFFFFF:
-            die(f"dataset element outside 32-bit range: {value}")
-        poly = poly_mul(poly, [(-value) % FIELD_PRIME, 1])
-    return poly
-
-
-def random_poly(deg: int) -> List[int]:
-    coeffs = [secrets.randbelow(FIELD_PRIME) for _ in range(deg + 1)]
-    if coeffs[-1] == 0:
-        coeffs[-1] = 1
-    return trim(coeffs)
-
-
-def random_share(poly: List[int], public_len: int) -> Tuple[List[int], List[int]]:
-    padded = poly[:] + [0] * max(0, public_len - len(poly))
-    padded = padded[:public_len]
-    cloud = [secrets.randbelow(FIELD_PRIME) for _ in range(public_len)]
-    evaluator = [(padded[i] - cloud[i]) % FIELD_PRIME for i in range(public_len)]
-    return trim(cloud), trim(evaluator)
-
-
 def deterministic_split_seed(party: str, round_id: int, values: List[int]) -> str:
     h = hashlib.sha256()
     h.update(party.encode())
@@ -248,45 +123,6 @@ def deterministic_split_seed(party: str, round_id: int, values: List[int]) -> st
         h.update(str(value).encode())
         h.update(b"\0")
     return h.hexdigest()
-
-
-def linear_roots(poly: List[int]) -> List[int]:
-    poly = monic(poly)
-    if degree(poly) <= 0:
-        return []
-    x_poly = [0, 1]
-    linear_part = poly_gcd(poly, poly_sub(poly_powmod(x_poly, FIELD_PRIME, poly), x_poly))
-    return sorted(_split_linear_factors(monic(linear_part), 1))
-
-
-def _split_linear_factors(poly: List[int], salt: int) -> List[int]:
-    poly = monic(poly)
-    deg = degree(poly)
-    if deg <= 0:
-        return []
-    if deg == 1:
-        return [(-poly[0] * mod_inv(poly[1])) % FIELD_PRIME]
-    exp = (FIELD_PRIME - 1) // 2
-    for attempt in range(1, 128):
-        seed = hashlib.sha256(f"{salt}:{attempt}:{poly}".encode()).digest()
-        coeffs = []
-        counter = 0
-        while len(coeffs) < deg:
-            block = hashlib.sha256(seed + counter.to_bytes(4, "big")).digest()
-            for off in range(0, len(block), 8):
-                coeffs.append(int.from_bytes(block[off:off + 8], "big") % FIELD_PRIME)
-                if len(coeffs) == deg:
-                    break
-            counter += 1
-        h = trim(coeffs)
-        if degree(h) <= 0:
-            continue
-        candidate = poly_gcd(poly, poly_sub(poly_powmod(h, exp, poly), [1]))
-        cdeg = degree(candidate)
-        if 0 < cdeg < deg:
-            other = poly_divexact(poly, candidate)
-            return _split_linear_factors(candidate, salt * 131 + attempt) + _split_linear_factors(other, salt * 257 + attempt)
-    raise RuntimeError(f"failed to split linear factor product of degree {deg}")
 
 
 def parse_values(text: str) -> List[int]:
@@ -312,23 +148,19 @@ def load_dataset(args: argparse.Namespace) -> List[int]:
 
 
 def make_party_payload(party: str, values: List[int], rounds: int, degree_bound: int, backend_path: str = "") -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    if rounds < 1:
+        die("--rounds must be positive")
+    if degree_bound <= 0:
+        die("--degree-bound must be positive")
     if len(values) > degree_bound:
         die(f"dataset has {len(values)} values, above --degree-bound {degree_bound}")
+
     generated = backend_share(values, rounds, degree_bound, backend_path)
-    if generated:
-        cloud_rounds = generated["cloud"]
-        eval_rounds = generated["query"]
-    else:
-        p = build_set_poly(values)
-        cloud_rounds = []
-        eval_rounds = []
-        public_len = 2 * degree_bound + 1
-        for round_id in range(1, rounds + 1):
-            omega = random_poly(degree_bound)
-            q = poly_mul(p, omega)
-            cloud, evaluator = random_share(q, public_len)
-            cloud_rounds.append({"round": round_id, "share": cloud})
-            eval_rounds.append({"round": round_id, "share": evaluator})
+    cloud_rounds = generated.get("cloud", [])
+    eval_rounds = generated.get("query", [])
+    if len(cloud_rounds) != rounds or len(eval_rounds) != rounds:
+        die("dpsi_poly_backend share returned an unexpected number of rounds")
+
     meta = {
         "party": party,
         "field_prime": FIELD_PRIME,
@@ -338,9 +170,9 @@ def make_party_payload(party: str, values: List[int], rounds: int, degree_bound:
         "version": deterministic_split_seed(party, rounds, values),
         "updated_at_ms": now_ms(),
     }
-    cloud_payload = dict(meta, role="cloud", shares=cloud_rounds)
-    eval_payload = dict(meta, role="query", shares=eval_rounds)
-    return cloud_payload, eval_payload
+    cloud_payload = {**meta, "role": "cloud", "shares": cloud_rounds}
+    query_payload = {**meta, "role": "query", "shares": eval_rounds}
+    return cloud_payload, query_payload
 
 
 def load_state(path: Path, default_role: str) -> Dict[str, Any]:
@@ -473,13 +305,8 @@ class JsonHandler(http.server.BaseHTTPRequestHandler):
         for idx in range(rounds):
             reconstructed.append(poly_add(cloud["rounds"][idx]["share"], local["rounds"][idx]["share"]))
         solved = backend_roots(reconstructed[0], reconstructed[1], self.server.poly_backend)
-        if solved:
-            degree_gcd = int(solved["degree_gcd"])
-            roots = solved["roots"]
-        else:
-            g = poly_gcd(reconstructed[0], reconstructed[1])
-            roots = linear_roots(g)
-            degree_gcd = degree(g)
+        degree_gcd = int(solved["degree_gcd"])
+        roots = solved["roots"]
         return {
             "ok": True,
             "field_prime": FIELD_PRIME,
